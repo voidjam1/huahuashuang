@@ -74,18 +74,15 @@
 </div>
 
 <header>
-    <div style="font-weight: bold; color: var(--primary);">GARTIC LITE</div>
-    <div id="room-info" style="font-size: 0.8rem; color: #999; cursor: pointer;" onclick="copyRoomID()">
-        房号: <span id="current-room-id">点击显示</span>
+    <div style="display: flex; align-items: center;">
+        <button id="menu-toggle" onclick="toggleMenu()">☰ 菜单</button>
+        <div style="font-weight: bold; color: var(--primary); margin-left: 10px;">GARTIC LITE</div>
     </div>
-    <div id="word-display">等待开始...</div>
-    <div id="timer">⏱️ 60s</div>
     
-</header>
-
-<header>
-    <button id="menu-toggle" onclick="toggleMenu()">☰ 菜单</button>
-    <div style="font-weight: bold; color: var(--primary);">GARTIC LITE</div>
+    <div id="room-info" style="font-size: 0.8rem; color: #999; cursor: pointer; border: 1px solid #ddd; padding: 2px 8px; border-radius: 10px;" onclick="copyRoomID()">
+        房号: <span id="current-room-id">点击复制</span>
+    </div>
+    
     <div id="word-display">等待开始...</div>
     <div id="timer">⏱️ 60s</div>
 </header>
