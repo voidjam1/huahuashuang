@@ -46,18 +46,28 @@ class NetworkManager {
     this.conn.on('open', () => {
         document.getElementById('lobby-overlay').style.display = 'none';
         
-        // --- 新增：心跳包保活 ---
+        // 开启心跳保活
+        if (this.heartbeat) clearInterval(this.heartbeat);
         this.heartbeat = setInterval(() => {
             if (this.conn && this.conn.open) {
                 this.conn.send({ cat: 'heartbeat' });
-            } else {
-                clearInterval(this.heartbeat);
             }
-        }, 5000);
+        }, 3000); // 每3秒发一次，保持链路活跃
 
-        if (this.isHost) {
-            engine.appendMsg('system', '✅ 玩家已连接！', 'green');
-        }
+        engine.appendMsg('system', '🎮', '连接已稳固，准备开始！', 'green');
+    });
+
+    this.conn.on('data', data => {
+        if (data.cat === 'heartbeat') return; // 过滤心跳包
+        this.handle(data);
+    });
+
+    this.conn.on('close', () => {
+        clearInterval(this.heartbeat);
+        engine.appendMsg('system', '⚠️', '连接丢失，正尝试重连...', 'red');
+        // 房主不重连，客人尝试重新 connect 房主 ID
+    });
+}
     });
 
     this.conn.on('close', () => {
