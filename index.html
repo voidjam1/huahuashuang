@@ -3,107 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gartic Pro | 全平台竞技场 🖌️</title>
+    <title>Gartic Pro | 联机竞技版 🖌️</title>
     <style>
-        :root {
-            --primary: #6c5ce7; --bg: #f5f6fa; --panel: #ffffff;
-            --chat-bg: #f1f2f6; --guess-bg: #fff9db;
+        :root { --primary: #6c5ce7; --bg: #f5f6fa; --panel: #ffffff; --chat-bg: #f1f2f6; --guess-bg: #fff9db; }
+        
+        /* 锁定全局视口，防止iPad拖动 */
+        html, body { 
+            margin: 0; padding: 0; width: 100%; height: 100%; 
+            overflow: hidden; overscroll-behavior: none; position: fixed; 
+            font-family: system-ui, -apple-system, sans-serif; background: var(--bg);
         }
 
         body {
-            font-family: system-ui, -apple-system, sans-serif;
-            background: var(--bg); margin: 0; height: 100vh;
             display: grid;
-            grid-template-areas: 
-                "header header header"
-                "side stage interaction";
+            grid-template-areas: "header header header" "side stage interaction";
             grid-template-columns: 240px 1fr 320px;
             grid-template-rows: 60px 1fr;
-            overflow: hidden;
         }
 
-        /* iPad 竖屏与手机适配：改为垂直流动 */
         @media (max-width: 1024px) {
             body {
-                grid-template-areas: 
-                    "header"
-                    "stage"
-                    "side"
-                    "interaction";
+                grid-template-areas: "header" "stage" "side" "interaction";
                 grid-template-columns: 1fr;
-                grid-template-rows: 60px 45vh auto 1fr;
+                grid-template-rows: 60px 40vh auto 1fr;
                 overflow-y: auto;
             }
         }
 
         header { grid-area: header; background: var(--panel); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
         .side-panel { grid-area: side; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
-        .stage-area { grid-area: stage; position: relative; background: #fff; margin: 10px; border-radius: 16px; border: 3px solid var(--primary); display: flex; flex-direction: column; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .stage-area { grid-area: stage; position: relative; background: #fff; margin: 10px; border-radius: 16px; border: 3px solid var(--primary); display: flex; flex-direction: column; }
         .interaction-panel { grid-area: interaction; display: flex; flex-direction: column; gap: 10px; padding: 10px; }
 
-        /* 画布覆盖层：游戏结束时锁定 */
+        canvas { touch-action: none; user-select: none; width: 100%; height: 100%; cursor: crosshair; }
+        
         #canvas-lock {
             display: none; position: absolute; inset: 0; background: rgba(255,255,255,0.7);
             z-index: 10; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px);
         }
 
-        /* 统一输入框组件 */
         .input-group { display: flex; background: #fff; border-radius: 10px; overflow: hidden; border: 1px solid #ddd; }
         .input-group input { flex: 1; border: none; padding: 12px; outline: none; }
         .send-btn { background: var(--primary); color: white; border: none; width: 50px; cursor: pointer; font-weight: bold; }
-
-        .msg-list { flex: 1; overflow-y: auto; padding: 10px; font-size: 14px; border-radius: 10px; }
+        .msg-list { flex: 1; overflow-y: auto; padding: 10px; font-size: 14px; border-radius: 10px; min-height: 150px; }
         .card { background: white; border-radius: 12px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-        /* 核心修复：锁死页面滚动 */
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden; /* 禁止溢出滚动 */
-    overscroll-behavior: none; /* 禁止橡皮筋回弹效果 */
-    position: fixed; /* 强制固定视口 */
-    touch-action: none; /* 禁止所有原生触摸行为 */
-}
 
-/* 确保画布层级正确且拦截所有手势 */
-canvas {
-    touch-action: none; /* 关键：告诉浏览器这个区域由代码接管，不要触发滚动 */
-    user-select: none;
-    -webkit-user-select: none;
-}
+        /* 联机遮罩 */
+        #lobby-overlay {
+            position: fixed; inset: 0; background: var(--primary); z-index: 1000;
+            display: flex; flex-direction: column; align-items: center; justify-content: center; color: white;
+        }
+        .btn-big { padding: 15px 30px; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; background:white; color:var(--primary); margin: 10px; }
     </style>
 </head>
 <body>
 
+<div id="lobby-overlay">
+    <h1>🎨 Gartic Pro 联机版</h1>
+    <div id="host-panel">
+        <button class="btn-big" onclick="network.createRoom()">🏠 创建新房间</button>
+        <div id="room-id-display" style="display:none; background:rgba(0,0,0,0.2); padding:15px; border-radius:10px; margin-top:10px;">
+            房间号: <span id="my-room-id" style="font-family: monospace; letter-spacing: 2px;">生成中...</span>
+        </div>
+    </div>
+    <div style="margin: 20px; opacity: 0.5;">———— 或者 ————</div>
+    <div id="join-panel">
+        <input type="text" id="target-id" placeholder="输入房间号" style="padding:15px; border-radius:10px; border:none; width:180px;">
+        <button class="btn-big" style="background:#00b894; color:white;" onclick="network.joinRoom()">🚀 加入</button>
+    </div>
+</div>
+
 <header>
-    <div style="font-weight: 900; color: var(--primary);">GARTIC LITE</div>
-    <div id="word-display" style="font-size: 1.2rem; font-weight: bold;">等待开始...</div>
-    <div id="timer">⏱️ 00:60</div>
+    <div style="font-weight: 900; color: var(--primary); font-size: 1.5rem;">GARTIC LITE</div>
+    <div id="word-display" style="font-size: 1.2rem; font-weight: bold; background: #eee; padding: 5px 15px; border-radius: 20px;">等待中...</div>
+    <div id="timer" style="font-family: monospace; font-size: 1.2rem;">⏱️ 00:60</div>
 </header>
 
 <aside class="side-panel">
     <div class="card">
         <h4>🏠 房间设置</h4>
-        <select id="theme-select" style="width:100%"></select>
-        <button class="send-btn" style="width:100%; margin-top:10px; border-radius:5px" onclick="engine.startGame()">开始</button>
+        <select id="theme-select" style="width:100%; padding:8px; margin-bottom:10px; border-radius:5px;"></select>
+        <button id="start-btn" class="send-btn" style="width:100%; height:40px; border-radius:5px" onclick="engine.startNewRound()">开始游戏</button>
     </div>
-    <div class="card" id="players">
-        <h4>👥 玩家榜</h4>
-        </div>
+    <div class="card">
+        <h4>👥 玩家状态</h4>
+        <div id="player-status" style="font-size: 0.9rem; color: #666;">等待连接...</div>
+    </div>
 </aside>
 
 <main class="stage-area">
     <div id="canvas-lock">
-        <h3>本局结束！</h3>
-        <button onclick="board.download()">💾 下载画作</button>
+        <h3 id="lock-msg">本局结束！</h3>
+        <button onclick="board.download()" style="padding:10px 20px; border-radius:8px; border:none; background:var(--primary); color:white; cursor:pointer;">💾 下载画作</button>
     </div>
     <canvas id="mainCanvas"></canvas>
-    <div id="painter-tools" style="padding:10px; display:flex; gap:15px; border-top:1px solid #eee;">
+    <div id="painter-tools" style="padding:10px; display:none; gap:15px; border-top:1px solid #eee; background:#fff; border-bottom-left-radius:16px; border-bottom-right-radius:16px;">
         <input type="color" id="colorPicker" value="#6c5ce7">
         <input type="range" id="sizePicker" min="1" max="20" value="5">
         <button onclick="board.clear()">🧹 清空</button>
-        <button onclick="board.undo()">↩️ 撤销</button>
     </div>
 </main>
 
@@ -113,101 +110,33 @@ canvas {
         <input type="text" id="chat-input" placeholder="聊天...">
         <button class="send-btn" onclick="engine.send('chat')">➤</button>
     </div>
-    
     <div class="card msg-list" id="guess-list" style="background: var(--guess-bg);"></div>
     <div class="input-group" style="border-color: #f1c40f;">
         <input type="text" id="guess-input" placeholder="猜猜是什么？">
         <button class="send-btn" style="background:#f1c40f" onclick="engine.send('guess')">🎯</button>
     </div>
 </div>
-<div class="card">
-    <h4>🏠 房间设置</h4>
-    <select id="theme-select" style="width:100%; padding:8px; margin-bottom:10px;"></select>
-    
-    <button id="start-btn" class="send-btn" style="width:100%; border-radius:5px" onclick="engine.startGame()">
-        开始游戏
-    </button>
-</div>
+
+<script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 <script src="painter.js"></script>
+<script src="network.js"></script>
 <script src="engine.js"></script>
+
 <script>
-    // 确保按顺序初始化
-const board = new DrawingBoard('mainCanvas', (data) => {
-    data.cat = 'paint'; // 给绘画数据打上标签
-    network.send(data); // 通过网络发出
-});
+    // 1. 初始化画板，并绑定网络回调
+    const board = new DrawingBoard('mainCanvas', (data) => {
+        data.cat = 'paint';
+        network.send(data);
+    });
 
-const engine = new GameEngine(board);
+    // 2. 初始化游戏引擎
+    const engine = new GameEngine(board);
+
+    // 3. 页面防抖动处理
+    document.addEventListener('touchmove', (e) => {
+        if (e.touches.length > 1) e.preventDefault();
+    }, { passive: false });
 </script>
-    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
 
-<div id="lobby-overlay" style="position:fixed; inset:0; background:#6c5ce7; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
-    <h1>🎨 Gartic Pro 联机版</h1>
-    
-    <div id="host-panel" style="text-align:center;">
-        <button class="btn-big" onclick="network.createRoom()">🏠 创建新房间</button>
-        <div id="room-id-display" style="margin-top:20px; font-size:24px; font-weight:bold; display:none; background:rgba(0,0,0,0.2); padding:10px; border-radius:10px;">
-            房间号: <span id="my-room-id">生成中...</span>
-            <p style="font-size:14px; opacity:0.8;">(把这个 ID 发给朋友)</p>
-        </div>
-        <div id="waiting-msg" style="margin-top:20px; display:none;">⏳ 等待玩家加入...</div>
-    </div>
-
-    <div style="margin: 30px 0; border-top:1px solid rgba(255,255,255,0.3); width:200px;"></div>
-
-    <div id="join-panel" style="display:flex; gap:10px;">
-        <input type="text" id="target-id" placeholder="输入朋友的房间号" style="padding:15px; border-radius:8px; border:none; outline:none; width:200px;">
-        <button class="btn-big" style="background:#00b894;" onclick="network.joinRoom()">🚀 加入</button>
-    </div>
-</div>
-
-<style>
-    .btn-big { padding: 15px 30px; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; transition:0.2s; background:white; color:#6c5ce7; }
-    .btn-big:active { transform: scale(0.95); }
-</style>
-    // index.html 底部
-const board = new DrawingBoard('mainCanvas', (data) => {
-    // 只有作画者发出的数据才广播
-    data.cat = 'paint';
-    network.send(data);
-});
-
-// 修改 engine.js 的 send 方法
-class GameEngine {
-    // ... 前面保持不变 ...
-
-    send(type) {
-        const input = document.getElementById(type + '-input');
-        const val = input.value.trim();
-        if(!val) return;
-
-        // 1. 自己屏幕上显示
-        this.appendMsg(type, '我', val);
-
-        // 2. 发送给对方
-        network.send({ cat: 'chat', type: type, msg: val });
-        
-        // 3. 如果我是房主，自己猜词也要判断
-        if (network.isHost && type === 'guess') {
-            this.checkAnswer(val);
-        }
-
-        input.value = '';
-    }
-
-    checkAnswer(val) {
-        if (val === this.currentWord) {
-            // 猜对了！广播胜利消息
-            network.send({ cat: 'game', type: 'win', ans: this.currentWord });
-            this.endGame(true, this.currentWord);
-        }
-    }
-    
-    startGame() {
-        // ... 原有逻辑 ...
-        // 通知玩家游戏开始
-        network.send({ cat: 'game', type: 'start' });
-    }
-}
 </body>
 </html>
