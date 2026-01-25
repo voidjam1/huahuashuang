@@ -10,18 +10,36 @@ class NetworkManager {
     this.peer = new Peer();
     
     this.peer.on('open', id => {
-        // 1. 显示 ID
-        document.getElementById('my-room-id').innerText = id;
+        const idDisplay = document.getElementById('my-room-id');
+        idDisplay.innerText = id;
         document.getElementById('room-id-display').style.display = 'block';
         
-        // 2. 自动显示主界面（房主传送门）
+        // --- 核心改动：一键复制逻辑 ---
+        idDisplay.style.cursor = "pointer";
+        idDisplay.title = "点击复制房号";
+        idDisplay.onclick = () => {
+            navigator.clipboard.writeText(id).then(() => {
+                const originalText = idDisplay.innerText;
+                idDisplay.innerText = "✅ 已复制！";
+                setTimeout(() => idDisplay.innerText = originalText, 2000);
+            });
+        };
+
+        // 自动传送房主
         setTimeout(() => {
             document.getElementById('lobby-overlay').style.display = 'none';
-            // 在主界面上方显示房号
             document.getElementById('word-display').innerText = "等待玩家加入...";
-            console.log("房主传送成功！房号:", id);
-        }, 1000); // 留1秒给房主看一眼 ID
+            // 在主界面也显示一个可以点击复制的房号
+            engine.appendMsg('system', `房号已生成：${id} (点击上方可复制)`, 'blue');
+        }, 1500);
     });
+
+    this.peer.on('connection', c => {
+        this.conn = c;
+        this.setup();
+        engine.appendMsg('system', '👥 玩家已加入！', 'green');
+    });
+}
 
     this.peer.on('connection', c => {
         this.conn = c;
