@@ -16,8 +16,8 @@
         .msg-list { flex: 1; overflow-y: auto; background: #fff; padding: 10px; border-radius: 8px; font-size: 14px; border: 1px solid #ddd; }
         .input-group { display: flex; border-radius: 8px; overflow: hidden; }
         .input-group input { flex: 1; padding: 10px; border: 1px solid #ddd; outline: none; }
-        #lobby-overlay { position: fixed; inset: 0; background: var(--primary); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        #lobby-overlay h1 { font-size: 2rem; margin-bottom: 20px; }
+.btn-big { min-width: 200px; padding: 15px; } /* 确保 iPad 上好点 */
         @media (max-width: 1024px) { body { grid-template-areas: "header" "stage" "interaction"; grid-template-columns: 1fr; grid-template-rows: 60px 40vh 1fr; } .side-panel { display: none; } }
     </style>
 </head>
