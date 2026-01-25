@@ -43,14 +43,33 @@ class NetworkManager {
     }
 
     setup() {
-        this.conn.on('open', () => {
-            document.getElementById('lobby-overlay').style.display = 'none';
-            if (this.isHost) {
-                engine.appendMsg('system', '✅ 玩家已连接！', 'green');
+    this.conn.on('open', () => {
+        document.getElementById('lobby-overlay').style.display = 'none';
+        
+        // --- 新增：心跳包保活 ---
+        this.heartbeat = setInterval(() => {
+            if (this.conn && this.conn.open) {
+                this.conn.send({ cat: 'heartbeat' });
+            } else {
+                clearInterval(this.heartbeat);
             }
-        });
-        this.conn.on('data', data => this.handle(data));
-    }
+        }, 5000);
+
+        if (this.isHost) {
+            engine.appendMsg('system', '✅ 玩家已连接！', 'green');
+        }
+    });
+
+    this.conn.on('close', () => {
+        engine.appendMsg('system', '❌ 连接已断开，请刷新页面重试', 'red');
+        clearInterval(this.heartbeat);
+    });
+
+    this.conn.on('data', data => {
+        if (data.cat === 'heartbeat') return; // 忽略心跳数据
+        this.handle(data);
+    });
+}
 
     send(data) {
         if (this.conn && this.conn.open) this.conn.send(data);
