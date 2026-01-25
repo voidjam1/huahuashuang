@@ -7,24 +7,29 @@ class NetworkManager {
 
  createRoom() {
     this.isHost = true;
-    this.peer = new Peer(); // 也可以使用 Peer('简短ID')，但不保证唯一
+    this.peer = new Peer();
     
     this.peer.on('open', id => {
-        // 把生成的长 ID 显示在紫色屏幕上
+        // 1. 显示 ID
         document.getElementById('my-room-id').innerText = id;
         document.getElementById('room-id-display').style.display = 'block';
         
-        // --- 核心改动：1.5秒后自动进入房间 ---
+        // 2. 自动显示主界面（房主传送门）
         setTimeout(() => {
             document.getElementById('lobby-overlay').style.display = 'none';
-            // 顺便更新一下主界面的提示信息
-            const wordDisplay = document.getElementById('word-display');
-            if(wordDisplay) wordDisplay.innerText = "等待好友加入...";
-            
-            // 建议在控制台打印一下，方便调试
-            console.log("房主已就绪，房号:", id);
-        }, 1500); 
+            // 在主界面上方显示房号
+            document.getElementById('word-display').innerText = "等待玩家加入...";
+            console.log("房主传送成功！房号:", id);
+        }, 1000); // 留1秒给房主看一眼 ID
     });
+
+    this.peer.on('connection', c => {
+        this.conn = c;
+        this.setup();
+        // 玩家进来时，发个系统广播
+        engine.appendMsg('system', '✅ 玩家已加入，房主可以点“开始游戏”了', 'green');
+    });
+}
 
     this.peer.on('connection', c => {
         this.conn = c;
