@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>题库来咯</title>
+    <style>
+        :root { --primary: #6c5ce7; --bg: #f8f9fa; --danger: #ff7675; }
+        body { font-family: 'PingFang SC', sans-serif; background: var(--bg); padding: 40px; color: #2d3436; }
+        .header { text-align: center; margin-bottom: 30px; }
+        
+        /* 创建主题区域 */
+        .create-theme { max-width: 800px; margin: 0 auto 30px; display: flex; gap: 10px; }
+        input { padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; }
+        .flex-1 { flex: 1; }
+        
+        /* 主题展示区 */
+        .themes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .theme-card { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 5px solid var(--primary); }
+        .theme-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px dashed #eee; padding-bottom: 10px; }
+        .theme-title { font-weight: bold; font-size: 1.2rem; color: var(--primary); }
+        
+        /* 词牌样式 */
+        .word-tag { display: inline-flex; align-items: center; background: #f1f2f6; padding: 5px 10px; border-radius: 20px; margin: 3px; font-size: 14px; transition: 0.3s; }
+        .word-tag:hover { background: #dfe4ea; }
+        .remove-word { margin-left: 5px; cursor: pointer; color: #aaa; }
+        .remove-word:hover { color: var(--danger); }
+        
+        .add-word-box { margin-top: 15px; display: flex; gap: 5px; }
+        .btn { padding: 8px 15px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .btn-add { background: var(--primary); color: white; }
+        .btn-del { background: none; color: var(--danger); border: 1px solid var(--danger); font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>高级感词库。</h1>
+    <p>想到啥写啥嗯对</p>
+</div>
+
+<div class="create-theme">
+    <input type="text" id="themeName" class="flex-1" placeholder="新主题名称（如：食物、电影、动漫）...">
+    <button class="btn btn-add" onclick="addNewTheme()">创建新主题</button>
+</div>
+
+<div class="themes-grid" id="themesDisplay">
+    </div>
+
+<script>
+    // 数据结构：[{title: '水果', words: ['苹果', '梨']}, {title: '动物', words: ['狗']}]
+    let db = JSON.parse(localStorage.getItem('drawGuessDB')) || [
+        {title: "基础词库", words: ["苹果", "香蕉", "猫", "飞机"]}
+    ];
+
+    function saveData() {
+        localStorage.setItem('drawGuessDB', JSON.stringify(db));
+        render();
+    }
+
+    function addNewTheme() {
+        const input = document.getElementById('themeName');
+        if (input.value.trim()) {
+            db.push({ title: input.value.trim(), words: [] });
+            input.value = '';
+            saveData();
+        }
+    }
+
+    function removeTheme(index) {
+        if(confirm('确定要删除整个主题吗？')) {
+            db.splice(index, 1);
+            saveData();
+        }
+    }
+
+    function addWord(themeIndex) {
+        const input = document.getElementById(`input-${themeIndex}`);
+        const word = input.value.trim();
+        if (word) {
+            db[themeIndex].words.push(word);
+            input.value = '';
+            saveData();
+        }
+    }
+
+    function removeWord(themeIndex, wordIndex) {
+        db[themeIndex].words.splice(wordIndex, 1);
+        saveData();
+    }
+
+    function render() {
+        const container = document.getElementById('themesDisplay');
+        container.innerHTML = '';
+
+        db.forEach((theme, tIdx) => {
+            const card = document.createElement('div');
+            card.className = 'theme-card';
+            
+            let wordsHtml = theme.words.map((w, wIdx) => `
+                <span class="word-tag">
+                    ${w} <span class="remove-word" onclick="removeWord(${tIdx}, ${wIdx})">×</span>
+                </span>
+            `).join('');
+
+            card.innerHTML = `
+                <div class="theme-header">
+                    <span class="theme-title">${theme.title} (${theme.words.length})</span>
+                    <button class="btn btn-del" onclick="removeTheme(${tIdx})">解散主题</button>
+                </div>
+                <div class="words-container">${wordsHtml || '<span style="color:#ccc;font-size:12px;">暂无词语</span>'}</div>
+                <div class="add-word-box">
+                    <input type="text" id="input-${tIdx}" style="flex:1; padding:5px;" placeholder="加新词..." onkeypress="if(event.key==='Enter') addWord(${tIdx})">
+                    <button class="btn btn-add" style="padding:5px 10px;" onclick="addWord(${tIdx})">+</button>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    // 初始渲染
+    render();
+</script>
+</body>
+</html>
