@@ -85,11 +85,13 @@ class GameEngine {
     }
 
     appendMsg(type, user, text, color) {
-        const list = document.getElementById(type === 'chat' || type === 'system' ? 'chat-list' : 'guess-list');
-        const div = document.createElement('div');
-        div.style.color = color || 'black';
-        div.innerHTML = `<strong>${user}:</strong> ${text}`;
-        list.appendChild(div);
-        list.scrollTop = list.scrollHeight;
-    }
+    const list = document.getElementById(type === 'chat' || type === 'system' ? 'chat-list' : 'guess-list');
+    const div = document.createElement('div');
+    // 确保只有当 color 存在时才应用样式，否则默认黑色
+    div.style.color = color || '#2d3436';
+    div.style.marginBottom = '4px';
+    div.innerHTML = `<strong style="color:#666">${user}:</strong> ${text}`;
+    list.appendChild(div);
+    list.scrollTop = list.scrollHeight;
+}
 }
