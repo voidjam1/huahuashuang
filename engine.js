@@ -1,46 +1,49 @@
 class GameEngine {
-    constructor(userId) {
-        this.userId = userId;
-        this.currentWord = "苹果"; // 示例
-        this.bindEvents();
+    constructor(board) {
+        this.board = board;
+        this.userName = "玩家_" + Math.floor(Math.random() * 1000);
+        this.targetWord = "猫"; // 模拟
+        this.init();
     }
 
-    bindEvents() {
-        document.getElementById('guess-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.handleGuess(e.target.value);
-        });
+    init() {
+        // 模拟词库加载
+        const db = JSON.parse(localStorage.getItem('drawGuessDB')) || [];
+        const select = document.getElementById('theme-select');
+        select.innerHTML = db.map((t, i) => `<option value="${i}">${t.title}</option>`).join('');
     }
 
-    handleGuess(val) {
-        const input = val.trim();
-        const guessArea = document.getElementById('guess-msgs');
-        
-        if (input === this.currentWord) {
-            // 完全匹配：对其他人广播，自己显示成功
-            this.logGuess(`🌟 ${this.userId} 猜中了答案！`, 'correct');
-            // 此处应触发下一局逻辑
-        } else if (this.isNearMiss(input, this.currentWord)) {
-            // 模糊匹配：仅自己可见的提示
-            this.logGuess(`🤏 「${input}」非常接近了！`, 'hint');
+    send(type) {
+        const input = document.getElementById(type + '-input');
+        const text = input.value.trim();
+        if (!text) return;
+
+        if (type === 'guess') {
+            this.processGuess(text);
         } else {
-            // 完全无关：正常显示
-            this.logGuess(`${this.userId}: ${input}`, 'normal');
+            this.appendMsg('chat-list', this.userName, text);
         }
-        document.getElementById('guess-input').value = "";
+        input.value = '';
     }
 
-    // 模糊算法：简单示例（判断包含关系或长度差异）
-    isNearMiss(a, b) {
-        if (a.length < 2) return false;
-        return b.includes(a) || a.includes(b);
+    processGuess(val) {
+        const list = 'guess-list';
+        if (val === this.targetWord) {
+            this.appendMsg(list, "🎉 系统", `${this.userName} 猜中了答案！`, "green");
+            this.board.setLock(true); // 作画结束
+        } else if (this.targetWord.includes(val) && val.length > 1) {
+            this.appendMsg(list, "💡 提示", `「${val}」很接近了！`, "orange");
+        } else {
+            this.appendMsg(list, this.userName, val);
+        }
     }
 
-    logGuess(text, type) {
+    appendMsg(listId, user, text, color = "#333") {
+        const el = document.getElementById(listId);
         const div = document.createElement('div');
-        div.className = `msg-${type}`;
-        div.innerText = text;
-        const area = document.getElementById('guess-msgs');
-        area.appendChild(div);
-        area.scrollTop = area.scrollHeight;
+        div.style.color = color;
+        div.innerHTML = `<strong>${user}:</strong> ${text}`;
+        el.appendChild(div);
+        el.scrollTop = el.scrollHeight;
     }
 }
