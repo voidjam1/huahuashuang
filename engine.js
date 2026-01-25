@@ -37,6 +37,9 @@ class GameEngine {
 }
 
     handleNewRound(data) {
+        if (network.peer) {
+    document.getElementById('current-room-id').innerText = network.peer.id;
+}
         this.currentWord = data.word;
         const amIDrawing = (network.isHost && data.drawer === 'host') || (!network.isHost && data.drawer === 'guest');
         
