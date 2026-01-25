@@ -34,6 +34,9 @@ class GameEngine {
     network.send(gameConfig);
     
     console.log("新回合已发起:", gameConfig);
+     
+    // 房主统一启动倒计时
+    this.startTimer(60); 
 }
 
     handleNewRound(data) {
