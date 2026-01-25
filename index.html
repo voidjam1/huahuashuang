@@ -134,5 +134,31 @@ canvas {
     const board = new DrawingBoard('mainCanvas');
     const engine = new GameEngine(board);
 </script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+
+<div id="lobby-overlay" style="position:fixed; inset:0; background:#6c5ce7; z-index:999; display:flex; flex-direction:column; align-items:center; justify-content:center; color:white;">
+    <h1>🎨 Gartic Pro 联机版</h1>
+    
+    <div id="host-panel" style="text-align:center;">
+        <button class="btn-big" onclick="network.createRoom()">🏠 创建新房间</button>
+        <div id="room-id-display" style="margin-top:20px; font-size:24px; font-weight:bold; display:none; background:rgba(0,0,0,0.2); padding:10px; border-radius:10px;">
+            房间号: <span id="my-room-id">生成中...</span>
+            <p style="font-size:14px; opacity:0.8;">(把这个 ID 发给朋友)</p>
+        </div>
+        <div id="waiting-msg" style="margin-top:20px; display:none;">⏳ 等待玩家加入...</div>
+    </div>
+
+    <div style="margin: 30px 0; border-top:1px solid rgba(255,255,255,0.3); width:200px;"></div>
+
+    <div id="join-panel" style="display:flex; gap:10px;">
+        <input type="text" id="target-id" placeholder="输入朋友的房间号" style="padding:15px; border-radius:8px; border:none; outline:none; width:200px;">
+        <button class="btn-big" style="background:#00b894;" onclick="network.joinRoom()">🚀 加入</button>
+    </div>
+</div>
+
+<style>
+    .btn-big { padding: 15px 30px; border:none; border-radius:10px; font-size:18px; font-weight:bold; cursor:pointer; transition:0.2s; background:white; color:#6c5ce7; }
+    .btn-big:active { transform: scale(0.95); }
+</style>
 </body>
 </html>
