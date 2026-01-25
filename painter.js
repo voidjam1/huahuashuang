@@ -46,18 +46,22 @@ class DrawingBoard {
     stop() { this.isDrawing = false; }
 
     drawRemote(data) {
-        const x = data.x * this.canvas.width;
-        const y = data.y * this.canvas.height;
-        if (data.type === 'start') {
-            this.ctx.beginPath();
-            this.ctx.moveTo(x, y);
-        } else {
-            this.ctx.strokeStyle = data.color;
-            this.ctx.lineWidth = data.width;
-            this.ctx.lineTo(x, y);
-            this.ctx.stroke();
-        }
+    // 关键点：将 0-1 的比例还原为对方屏幕的实际像素
+    const x = data.x * this.canvas.width;
+    const y = data.y * this.canvas.height;
+
+    if (data.type === 'start') {
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y);
+    } else if (data.type === 'draw') {
+        this.ctx.strokeStyle = data.color || '#000';
+        this.ctx.lineWidth = data.width || 5;
+        this.ctx.lineTo(x, y);
+        this.ctx.stroke();
+    } else if (data.clear) {
+        this.clear(true);
     }
+}
 
     clear(remote = false) {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
