@@ -1,92 +1,89 @@
 class NetworkManager {
     constructor() {
-        this.peer = null;
-        this.conn = null;
+        this.client = null;
+        this.roomID = null;
         this.isHost = false;
-        this.heartbeat = null;
         this.myNickname = "玩家";
     }
 
-    // 获取当前输入框的昵称
     getNickname() {
-        const name = document.getElementById('my-nickname').value.trim();
-        return name || (this.isHost ? "房主" : "朋友");
+        return document.getElementById('my-nickname').value.trim() || (this.isHost ? "房主" : "朋友");
+    }
+
+    // 统一的连接函数
+    connectToCloud(roomId, isHost) {
+        this.isHost = isHost;
+        this.roomID = roomId;
+        this.myNickname = this.getNickname();
+        engine.setSelfName(this.myNickname);
+
+        // 使用 EMQX 公共免费服务器 (支持 WebSocket 协议)
+        // 这个服务器会自动寻找离你和你朋友最近的节点
+        const options = {
+            clean: true,
+            connectTimeout: 4000,
+            clientId: 'gartic_' + Math.random().toString(16).substr(2, 8),
+        };
+
+        // 这里的 wxs 代表加密的 WebSocket 连接，跨国传输更安全且不易被拦截
+        this.client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
+
+        this.client.on('connect', () => {
+            console.log('已连接至全球中转节点');
+            // 订阅房间主题：gartic/room/房号
+            this.client.subscribe(`gartic/room/${this.roomID}`, (err) => {
+                if (!err) {
+                    document.getElementById('lobby-overlay').style.display = 'none';
+                    // 发送握手信号
+                    this.send({ cat: 'handshake', name: this.myNickname });
+                    engine.appendMsg('chat-list', '系统', `已进入房间: ${this.roomID}`, 'green');
+                }
+            });
+        });
+
+        this.client.on('message', (topic, payload) => {
+            const data = JSON.parse(payload.toString());
+            // 过滤掉自己发的消息
+            if (data._from === options.clientId) return;
+
+            if (data.cat === 'handshake') {
+                engine.setOpponentName(data.name);
+                engine.appendMsg('chat-list', '系统', `玩家【${data.name}】已就绪！`, 'green');
+                engine.onPlayerJoined(this.isHost);
+                // 朋友收到房主握手后，回传一个握手，确保双方都有名字
+                if (this.isHost) this.send({ cat: 'handshake', name: this.myNickname });
+            } else {
+                engine.handlePacket(data);
+            }
+        });
+
+        this.client.on('error', (err) => {
+            alert('连接失败，请检查网络');
+            console.error(err);
+        });
     }
 
     createRoom() {
-        this.isHost = true;
-        this.myNickname = this.getNickname();
-        engine.setSelfName(this.myNickname); // 设置引擎里的名字
-
-        this.peer = new Peer();
-        
+        // 随机生成一个 6 位数字房号
+        const randomID = Math.floor(100000 + Math.random() * 900000).toString();
         document.getElementById('lobby-btns').style.display = 'none';
         document.getElementById('room-info-display').style.display = 'block';
-
-        this.peer.on('open', id => {
-            document.getElementById('my-room-id').innerText = id;
-            engine.appendMsg('chat-list', '系统', `房间已创建，我是: ${this.myNickname}`, 'blue');
-        });
-
-        this.peer.on('connection', c => this.setupConnection(c));
+        document.getElementById('my-room-id').innerText = randomID;
+        
+        this.connectToCloud(randomID, true);
     }
 
     joinRoom() {
         const id = document.getElementById('target-id').value.trim();
         if (!id) return alert("请输入房号");
-        
-        this.isHost = false;
-        this.myNickname = this.getNickname();
-        engine.setSelfName(this.myNickname);
-
-        this.peer = new Peer();
-        this.peer.on('open', () => {
-            const c = this.peer.connect(id);
-            this.setupConnection(c);
-        });
-    }
-
-    setupConnection(conn) {
-        this.conn = conn;
-        
-        this.conn.on('open', () => {
-            document.getElementById('lobby-overlay').style.display = 'none';
-            engine.appendMsg('chat-list', '系统', '连接建立！正在交换名片...', 'green');
-
-            // 1. 发送握手包：把我的名字发给对方
-            this.send({ cat: 'handshake', name: this.myNickname });
-
-            // 心跳
-            this.heartbeat = setInterval(() => {
-                if (this.conn.open) this.conn.send({ cat: 'heartbeat' });
-            }, 3000);
-        });
-
-        this.conn.on('data', data => {
-            if (data.cat === 'heartbeat') return;
-            
-            // 2. 处理握手包
-            if (data.cat === 'handshake') {
-                engine.setOpponentName(data.name);
-                engine.appendMsg('chat-list', '系统', `玩家【${data.name}】已加入！`, 'green');
-                // 只有房主需要更新UI控制权
-                if (this.isHost) engine.onPlayerJoined(true);
-                else engine.onPlayerJoined(false);
-                return;
-            }
-
-            engine.handlePacket(data);
-        });
-
-        this.conn.on('close', () => {
-            clearInterval(this.heartbeat);
-            engine.appendMsg('chat-list', '系统', '❌ 连接断开', 'red');
-        });
+        this.connectToCloud(id, false);
     }
 
     send(data) {
-        if (this.conn && this.conn.open) {
-            this.conn.send(data);
+        if (this.client && this.client.connected) {
+            // 附带发送者 ID 避免回环
+            data._from = this.client.options.clientId;
+            this.client.publish(`gartic/room/${this.roomID}`, JSON.stringify(data));
         }
     }
 }
