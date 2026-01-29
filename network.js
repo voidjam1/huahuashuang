@@ -9,17 +9,17 @@ class NetworkManager {
     createRoom() {
         this.isHost = true;
         this.peer = new Peer();
+        
+        // UI 更新：显示正在创建
+        document.getElementById('lobby-btns').style.display = 'none';
+        document.getElementById('room-info-display').style.display = 'block';
+
         this.peer.on('open', id => {
             document.getElementById('my-room-id').innerText = id;
-            document.getElementById('room-id-display').style.display = 'block';
-            document.getElementById('current-room-id').innerText = id;
-            
-            setTimeout(() => {
-                document.getElementById('lobby-overlay').style.display = 'none';
-                engine.appendMsg('system', '🏠', '房间创建成功，等待好友...', '#6c5ce7');
-            }, 2000);
+            engine.appendMsg('system', 'System', `房号已生成: ${id}`, 'blue');
         });
-        this.peer.on('connection', c => this.handleConnect(c));
+
+        this.peer.on('connection', c => this.setupConnection(c));
     }
 
     joinRoom() {
@@ -27,47 +27,48 @@ class NetworkManager {
         if (!id) return alert("请输入房号");
         this.isHost = false;
         this.peer = new Peer();
+        
         this.peer.on('open', () => {
             const c = this.peer.connect(id);
-            this.handleConnect(c);
+            this.setupConnection(c);
         });
     }
 
-    handleConnect(c) {
-        this.conn = c;
+    setupConnection(conn) {
+        this.conn = conn;
+        
         this.conn.on('open', () => {
+            // 关闭遮罩，进入游戏大厅
             document.getElementById('lobby-overlay').style.display = 'none';
-            document.getElementById('current-room-id').innerText = this.conn.peer;
+            engine.appendMsg('system', 'System', '✅ 连接成功！', 'green');
             
-            // 心跳保活
-            this.heartbeat = setInterval(() => {
-                if(this.conn.open) this.conn.send({cat:'heartbeat'});
-            }, 4000);
+            // 触发引擎的连接回调
+            engine.onPlayerJoined(this.isHost);
 
-            engine.appendMsg('system', '✅', '连接成功！游戏可以开始了', 'green');
+            // 启动心跳
+            this.heartbeat = setInterval(() => {
+                if (this.conn.open) this.conn.send({ cat: 'heartbeat' });
+            }, 3000);
         });
+
         this.conn.on('data', data => {
-            if(data.cat === 'heartbeat') return;
-            this.handle(data);
+            if (data.cat === 'heartbeat') return;
+            // 路由数据到引擎
+            engine.handlePacket(data);
         });
+
         this.conn.on('close', () => {
             clearInterval(this.heartbeat);
-            engine.appendMsg('system', '❌', '连接已断开，请刷新', 'red');
+            engine.appendMsg('system', 'System', '❌ 连接已断开', 'red');
+            alert("对方已断线");
         });
     }
 
     send(data) {
-        if (this.conn && this.conn.open) this.conn.send(data);
-    }
-
-    handle(data) {
-        if (data.cat === 'paint') board.drawRemote(data);
-        else if (data.cat === 'chat') engine.appendMsg(data.type, '对方', data.msg);
-        else if (data.cat === 'game') {
-            if (data.type === 'newRound') engine.handleNewRound(data);
-            if (data.type === 'win') engine.handleGameOver(true, '对方');
-            if (data.type === 'tick') document.getElementById('timer').innerText = `⏱️ ${data.time}s`;
+        if (this.conn && this.conn.open) {
+            this.conn.send(data);
         }
     }
 }
+
 const network = new NetworkManager();
