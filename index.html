@@ -129,20 +129,80 @@
     </div>
 </main>
 
+<style>
+    /* ...原有样式... */
+    
+    /* 交互区重构：垂直分布 */
+    .interaction-panel { 
+        grid-area: side; 
+        display: flex; 
+        flex-direction: column; 
+        padding: 10px; 
+        gap: 10px; 
+        background: #f1f2f6; 
+        border-left: 2px solid #dfe6e9;
+    }
+
+    /* 区域标题 */
+    .zone-label { font-size: 12px; font-weight: bold; color: #636e72; margin-bottom: 4px; display: flex; justify-content: space-between; }
+
+    /* 猜题区 (上半部分) */
+    .guess-zone { flex: 1; display: flex; flex-direction: column; min-height: 120px; }
+    #guess-list { 
+        flex: 1; 
+        background: #fff9db; /* 淡黄色背景 */
+        border: 2px dashed #ffeaa7; 
+        border-radius: 8px; 
+        padding: 8px; 
+        overflow-y: auto; 
+        font-size: 13px;
+        margin-bottom: 5px;
+    }
+
+    /* 聊天区 (下半部分) */
+    .chat-zone { flex: 2; display: flex; flex-direction: column; }
+    #chat-list { 
+        flex: 1; 
+        background: #ffffff; 
+        border: 1px solid #dfe6e9; 
+        border-radius: 8px; 
+        padding: 8px; 
+        overflow-y: auto; 
+        font-size: 13px;
+        margin-bottom: 5px;
+    }
+
+    /* 输入框样式区分 */
+    .input-guess { border: 2px solid #f1c40f !important; background: #fffbf0; }
+    .input-chat { border: 1px solid #b2bec3 !important; }
+
+    /* 消息气泡 */
+    .msg-item { margin-bottom: 4px; line-height: 1.4; word-break: break-all; }
+    .sys-msg { text-align: center; background: rgba(0,0,0,0.05); border-radius: 4px; padding: 2px; font-size: 12px; margin: 5px 0; }
+</style>
+
 <div class="interaction-panel">
-    <div class="list-container">
-        <div id="guess-list">
-            <div style="color:#aaa; text-align:center; font-size:12px;">--- 猜题记录 ---</div>
-        </div>
-        <div id="chat-list">
-            <div style="color:#aaa; text-align:center; font-size:12px;">--- 聊天室 ---</div>
+    
+    <div class="guess-zone">
+        <div class="zone-label">🤔 猜题记录 (仅答案)</div>
+        <div id="guess-list"></div>
+        <div class="input-group">
+            <input type="text" id="guess-input" class="input-guess" placeholder="输入答案..." 
+                   onkeypress="if(event.key==='Enter') engine.sendGuess()">
+            <button class="btn" style="background:#f1c40f; color:#2d3436;" onclick="engine.sendGuess()">提交</button>
         </div>
     </div>
 
-    <div class="input-group">
-        <input type="text" id="input-box" placeholder="输入聊天或答案..." onkeypress="if(event.key==='Enter') engine.handleInput()">
-        <button class="btn btn-primary" onclick="engine.handleInput()">发送</button>
+    <div class="chat-zone">
+        <div class="zone-label">💬 聊天室</div>
+        <div id="chat-list"></div>
+        <div class="input-group">
+            <input type="text" id="chat-input" class="input-chat" placeholder="畅所欲言..." 
+                   onkeypress="if(event.key==='Enter') engine.sendChat()">
+            <button class="btn btn-primary" onclick="engine.sendChat()">发送</button>
+        </div>
     </div>
+
 </div>
 
 <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
