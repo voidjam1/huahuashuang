@@ -3,98 +3,119 @@ class NetworkManager {
         this.client = null;
         this.roomID = null;
         this.isHost = false;
-        this.myNickname = "玩家";
+        this.myNickname = "";
     }
 
-    getNickname() {
-        return document.getElementById('my-nickname').value.trim() || (this.isHost ? "房主" : "朋友");
+    // 显示大厅错误信息
+    showError(msg) {
+        document.getElementById('lobby-status').innerText = msg;
+    }
+
+    // 切换到游戏视图
+    switchToGameView() {
+        document.getElementById('view-lobby').style.display = 'none';
+        document.getElementById('view-game').style.display = 'grid';
+        document.getElementById('display-room-id').innerText = this.roomID;
+        
+        // 视图可见后，必须重新校准 canvas 尺寸
+        setTimeout(() => board.resize(), 100);
     }
 
     connectToCloud(roomId, isHost) {
+        const nameInput = document.getElementById('lobby-nickname').value.trim();
+        if (!nameInput) {
+            return this.showError("⚠️ 请先给自己起个名字！");
+        }
+
         this.isHost = isHost;
         this.roomID = roomId;
-        this.myNickname = this.getNickname();
+        this.myNickname = nameInput;
         engine.setSelfName(this.myNickname);
+
+        this.showError("⏳ 正在连接全球服务器...");
 
         const options = {
             clean: true,
-            connectTimeout: 5000, // 跨国连接给5秒耐心
-            keepalive: 30,        // 30秒心跳，防止跨海光缆链路空置被切断
-            reconnectPeriod: 1000, // 断线后每秒重试一次
-            clientId: 'gartic_' + Math.random().toString(16).substr(2, 8),
+            connectTimeout: 5000,
+            keepalive: 30,
+            reconnectPeriod: 2000,
+            clientId: 'gartic_' + Math.random().toString(16).substr(2, 8)
         };
 
-        // 端口 8084 是 WSS 加密端口，对绕过某些网络限制非常有效
+        // 使用支持 WSS 的公共 MQTT 服务器
         this.client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
 
         this.client.on('connect', () => {
-            console.log('✅ 已接入全球中转站');
-            // 使用更具唯一性的主题路径
+            console.log('✅ MQTT 连接成功');
             const topic = `gartic_pro/room/${this.roomID}`;
             
-            this.client.subscribe(topic, { qos: 1 }, (err) => { // qos: 1 确保消息至少到达一次
+            this.client.subscribe(topic, { qos: 1 }, (err) => {
                 if (!err) {
-                    document.getElementById('lobby-overlay').style.display = 'none';
-                    // 进屋先喊一声：我来了！
+                    // 连接成功且订阅成功 -> 切换界面
+                    this.switchToGameView();
+                    
+                    // 只有房主能看到“开始游戏”按钮
+                    if (this.isHost) {
+                        document.getElementById('btn-start-game').style.display = 'block';
+                    }
+                    
+                    // 发送握手
                     this.send({ cat: 'handshake', name: this.myNickname });
-                    engine.appendMsg('chat-list', '系统', `已进入房间: ${this.roomID}`, 'green');
+                    engine.appendMsg('chat-list', '系统', `已加入房间: ${this.roomID}`, '#00b894');
+                } else {
+                    this.showError("❌ 订阅房间失败，请重试");
                 }
             });
         });
 
         this.client.on('message', (topic, payload) => {
             let data;
-            try {
-                data = JSON.parse(payload.toString());
-            } catch (e) { return; }
-
-            // 核心过滤：不处理自己发的消息
+            try { data = JSON.parse(payload.toString()); } catch (e) { return; }
             if (data._from === this.client.options.clientId) return;
 
             if (data.cat === 'handshake') {
                 engine.setOpponentName(data.name);
-                engine.appendMsg('chat-list', '系统', `👋 玩家【${data.name}】进入了房间`, '#6c5ce7');
+                engine.appendMsg('chat-list', '系统', `👋 ${data.name} 进入了房间`, '#6c5ce7');
                 
-                // 关键点：如果是别人新进来的，我要告诉他我也在
-                // 这样无论谁先谁后进，最终双方都能获取彼此的名字
+                // 如果是第一次打招呼，我也要回礼，告诉他我的名字
                 if (data.isFirstHello) { 
                     this.send({ cat: 'handshake', name: this.myNickname, isFirstHello: false });
                 }
-                
-                engine.onPlayerJoined(this.isHost);
             } else {
                 engine.handlePacket(data);
             }
         });
 
-        this.client.on('close', () => {
-            console.log('🚫 掉线重连中...');
+        this.client.on('error', (err) => {
+            console.error(err);
+            this.showError("❌ 连接中断，正在重连...");
+        });
+        
+        this.client.on('offline', () => {
+            this.showError("📡 网络不稳定...");
         });
     }
 
     createRoom() {
         const randomID = Math.floor(100000 + Math.random() * 900000).toString();
-        document.getElementById('lobby-btns').style.display = 'none';
-        document.getElementById('room-info-display').style.display = 'block';
-        document.getElementById('my-room-id').innerText = randomID;
         this.connectToCloud(randomID, true);
     }
 
     joinRoom() {
-        const id = document.getElementById('target-id').value.trim();
-        if (!id) return alert("请输入房号");
+        const id = document.getElementById('lobby-roomid').value.trim();
+        if (!id || id.length !== 6) {
+            return this.showError("⚠️ 请输入正确的 6 位房号");
+        }
         this.connectToCloud(id, false);
     }
 
     send(data) {
         if (this.client && this.client.connected) {
-            // 默认带上初次招呼标记，方便对方回礼
             if (data.cat === 'handshake' && data.isFirstHello === undefined) {
                 data.isFirstHello = true;
             }
             data._from = this.client.options.clientId;
             const topic = `gartic_pro/room/${this.roomID}`;
-            // 聊天和猜题用 qos: 1 (保证到达)，画画用 qos: 0 (追求速度)
             const qos = data.cat === 'paint' ? 0 : 1;
             this.client.publish(topic, JSON.stringify(data), { qos });
         }
