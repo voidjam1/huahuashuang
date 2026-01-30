@@ -4,70 +4,86 @@ class NetworkManager {
         this.roomID = null;
         this.isHost = false;
         this.myNickname = "";
+        
+        // 备选服务器列表 (自动轮询)
+        this.brokerList = [
+            // 线路1: HiveMQ (通常跨国连接最稳)
+            'wss://broker.hivemq.com:8884/mqtt',
+            // 线路2: EMQX (国内速度快，但偶尔抽风)
+            'wss://broker.emqx.io:8084/mqtt',
+            // 线路3: Mosquitto (老牌服务器)
+            'wss://test.mosquitto.org:8081'
+        ];
+        this.currentBrokerIndex = 0;
     }
 
-    // 显示大厅错误信息
     showError(msg) {
-        document.getElementById('lobby-status').innerText = msg;
+        const el = document.getElementById('lobby-status');
+        if (el) el.innerText = msg;
+        console.log(`[系统状态] ${msg}`);
     }
 
-    // 切换到游戏视图
     switchToGameView() {
         document.getElementById('view-lobby').style.display = 'none';
         document.getElementById('view-game').style.display = 'grid';
         document.getElementById('display-room-id').innerText = this.roomID;
-        
-        // 视图可见后，必须重新校准 canvas 尺寸
         setTimeout(() => board.resize(), 100);
     }
 
+    // --- 核心修改：递归尝试连接 ---
     connectToCloud(roomId, isHost) {
-        const nameInput = document.getElementById('lobby-nickname').value.trim();
-        if (!nameInput) {
-            return this.showError("⚠️ 请先给自己起个名字！");
+        // 如果是第一次调用，获取输入框的值
+        if (!this.myNickname) {
+            const nameInput = document.getElementById('lobby-nickname').value.trim();
+            if (!nameInput) return this.showError("⚠️ 请先给自己起个名字！");
+            this.myNickname = nameInput;
         }
 
         this.isHost = isHost;
         this.roomID = roomId;
-        this.myNickname = nameInput;
         engine.setSelfName(this.myNickname);
 
-        this.showError("⏳ 正在连接全球服务器...");
+        const currentUrl = this.brokerList[this.currentBrokerIndex];
+        this.showError(`⏳ 正在尝试连接线路 ${this.currentBrokerIndex + 1}...`);
+        console.log(`正在连接: ${currentUrl}`);
+
+        // 防止重复连接
+        if (this.client) {
+            this.client.end();
+            this.client = null;
+        }
 
         const options = {
             clean: true,
-            connectTimeout: 5000,
+            connectTimeout: 5000, // 5秒连不上就切线路
             keepalive: 30,
-            reconnectPeriod: 2000,
             clientId: 'gartic_' + Math.random().toString(16).substr(2, 8)
         };
 
-        // 使用支持 WSS 的公共 MQTT 服务器
-        this.client = mqtt.connect('wss://broker.emqx.io:8084/mqtt', options);
+        this.client = mqtt.connect(currentUrl, options);
 
+        // 1. 连接成功
         this.client.on('connect', () => {
-            console.log('✅ MQTT 连接成功');
+            console.log('✅ 连接成功:', currentUrl);
             const topic = `gartic_pro/room/${this.roomID}`;
             
             this.client.subscribe(topic, { qos: 1 }, (err) => {
                 if (!err) {
-                    // 连接成功且订阅成功 -> 切换界面
+                    this.showError("🚀 加入成功！");
                     this.switchToGameView();
+                    if (this.isHost) document.getElementById('btn-start-game').style.display = 'block';
                     
-                    // 只有房主能看到“开始游戏”按钮
-                    if (this.isHost) {
-                        document.getElementById('btn-start-game').style.display = 'block';
-                    }
-                    
-                    // 发送握手
+                    // 进屋喊话
                     this.send({ cat: 'handshake', name: this.myNickname });
-                    engine.appendMsg('chat-list', '系统', `已加入房间: ${this.roomID}`, '#00b894');
+                    engine.appendMsg('chat-list', '系统', `已连接至线路 ${this.currentBrokerIndex + 1}`, '#00b894');
                 } else {
-                    this.showError("❌ 订阅房间失败，请重试");
+                    // 订阅失败也算连接失败，切换下一个
+                    this.tryNextBroker();
                 }
             });
         });
 
+        // 2. 收到消息
         this.client.on('message', (topic, payload) => {
             let data;
             try { data = JSON.parse(payload.toString()); } catch (e) { return; }
@@ -75,9 +91,7 @@ class NetworkManager {
 
             if (data.cat === 'handshake') {
                 engine.setOpponentName(data.name);
-                engine.appendMsg('chat-list', '系统', `👋 ${data.name} 进入了房间`, '#6c5ce7');
-                
-                // 如果是第一次打招呼，我也要回礼，告诉他我的名字
+                engine.appendMsg('chat-list', '系统', `👋 ${data.name} 来了`, '#6c5ce7');
                 if (data.isFirstHello) { 
                     this.send({ cat: 'handshake', name: this.myNickname, isFirstHello: false });
                 }
@@ -86,34 +100,50 @@ class NetworkManager {
             }
         });
 
+        // 3. 连接错误 -> 自动切换
         this.client.on('error', (err) => {
-            console.error(err);
-            this.showError("❌ 连接中断，正在重连...");
+            console.warn('当前线路连接失败:', err);
+            this.tryNextBroker();
         });
         
+        // 4. 连接断开 (如果是还没连上就断了)
         this.client.on('offline', () => {
-            this.showError("📡 网络不稳定...");
+            // 这里不立即切换，让 connectTimeout 去触发切换，防止网络抖动频繁切换
+            this.showError("📡 正在寻找更佳线路...");
         });
+    }
+
+    tryNextBroker() {
+        this.currentBrokerIndex++;
+        if (this.currentBrokerIndex >= this.brokerList.length) {
+            this.currentBrokerIndex = 0; // 如果都失败了，从头再来
+            this.showError("❌ 所有线路繁忙，请检查你的网络连接...");
+            return;
+        }
+        // 延迟 1 秒后重试下一个，给系统喘息时间
+        setTimeout(() => {
+            this.connectToCloud(this.roomID, this.isHost);
+        }, 1000);
     }
 
     createRoom() {
         const randomID = Math.floor(100000 + Math.random() * 900000).toString();
+        // 清空重试索引
+        this.currentBrokerIndex = 0;
         this.connectToCloud(randomID, true);
     }
 
     joinRoom() {
         const id = document.getElementById('lobby-roomid').value.trim();
-        if (!id || id.length !== 6) {
-            return this.showError("⚠️ 请输入正确的 6 位房号");
-        }
+        if (!id || id.length !== 6) return this.showError("⚠️ 请输入 6 位房号");
+        // 清空重试索引
+        this.currentBrokerIndex = 0;
         this.connectToCloud(id, false);
     }
 
     send(data) {
         if (this.client && this.client.connected) {
-            if (data.cat === 'handshake' && data.isFirstHello === undefined) {
-                data.isFirstHello = true;
-            }
+            if (data.cat === 'handshake' && data.isFirstHello === undefined) data.isFirstHello = true;
             data._from = this.client.options.clientId;
             const topic = `gartic_pro/room/${this.roomID}`;
             const qos = data.cat === 'paint' ? 0 : 1;
