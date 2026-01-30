@@ -3,32 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gartic Pro 最终版</title>
+    <title>Gartic Pro - 跨国稳定版</title>
+    <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
     <style>
         :root { --primary: #6c5ce7; --bg: #f5f6fa; --chat-bg: #fff; --guess-bg: #ffeaa7; }
         * { box-sizing: border-box; }
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; position: fixed; font-family: "PingFang SC", sans-serif; background: var(--bg); }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: "PingFang SC", sans-serif; background: var(--bg); }
         
-        body { display: grid; grid-template-areas: "header header" "stage side"; grid-template-columns: 1fr 300px; grid-template-rows: 60px 1fr; }
+        /* === 视图控制 === */
+        #view-lobby { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--primary); color: white; transition: 0.3s; }
+        #view-game { width: 100%; height: 100%; display: none; grid-template-areas: "header header" "stage side"; grid-template-columns: 1fr 320px; grid-template-rows: 60px 1fr; }
+
+        /* === 大厅样式 === */
+        .lobby-card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; width: 90%; max-width: 400px; color: #333; }
+        .lobby-input { width: 100%; padding: 12px; margin: 10px 0; border: 2px solid #eee; border-radius: 8px; font-size: 16px; outline: none; transition: 0.2s; }
+        .lobby-input:focus { border-color: var(--primary); }
+        .lobby-btn { width: 100%; padding: 12px; margin-top: 10px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-create { background: var(--primary); color: white; }
+        .btn-join { background: #00b894; color: white; }
+        .divider { margin: 20px 0; color: #999; font-size: 14px; }
+
+        /* === 游戏界面样式 === */
         @media (max-width: 768px) {
-            body { grid-template-areas: "header" "stage" "interaction"; grid-template-columns: 1fr; grid-template-rows: 50px 1fr 240px; }
-            .side-menu { width: 85% !important; }
+            #view-game { grid-template-areas: "header" "stage" "interaction"; grid-template-columns: 1fr; grid-template-rows: 50px 1fr 260px; }
         }
 
         /* 顶部栏 */
         header { grid-area: header; background: #fff; display: flex; align-items: center; justify-content: space-between; padding: 0 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); z-index: 10; }
         .score-board { display: flex; gap: 10px; font-weight: bold; font-size: 14px; }
         .score-item { background: #f1f2f6; padding: 5px 12px; border-radius: 15px; display: flex; align-items: center; gap: 5px; }
+        .room-tag { background: #ffeaa7; color: #d35400; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; margin-left: 10px; cursor: pointer;}
 
         /* 画板区 */
         .stage-area { grid-area: stage; position: relative; margin: 10px; background: white; border-radius: 10px; border: 2px solid var(--primary); overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
         canvas { touch-action: none; width: 100%; height: 100%; cursor: crosshair; }
 
-        /* 交互区 */
+        /* 交互区 (分离) */
         .interaction-panel { grid-area: side; display: flex; flex-direction: column; padding: 10px; gap: 8px; background: #f1f2f6; border-left: 2px solid #dfe6e9; }
-        .zone-label { font-size: 12px; font-weight: bold; color: #636e72; margin-bottom: 4px; }
+        .zone-label { font-size: 12px; font-weight: bold; color: #636e72; margin-bottom: 4px; display: flex; justify-content: space-between; }
         
-        .guess-zone { flex: 1; display: flex; flex-direction: column; min-height: 100px; }
+        .guess-zone { flex: 1; display: flex; flex-direction: column; min-height: 120px; }
         #guess-list { flex: 1; background: #fff9db; border: 2px dashed #ffeaa7; border-radius: 8px; padding: 8px; overflow-y: auto; font-size: 13px; margin-bottom: 5px; }
         
         .chat-zone { flex: 1.5; display: flex; flex-direction: column; }
@@ -37,143 +51,112 @@
         .input-group { display: flex; gap: 5px; }
         .input-group input { flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; }
         .input-guess { border: 2px solid #f1c40f !important; background: #fffbf0; }
+        .btn-mini { padding: 0 12px; border: none; border-radius: 4px; cursor: pointer; color: white; font-weight: bold; }
 
-        /* 消息样式 */
+        /* 消息气泡 */
         .msg-item { margin-bottom: 4px; line-height: 1.4; word-break: break-all; }
         .sys-msg { text-align: center; background: rgba(0,0,0,0.05); border-radius: 4px; padding: 2px; font-size: 12px; margin: 5px 0; color: #666; }
 
-        /* 侧滑菜单 */
-        .side-menu { position: fixed; left: -100%; top: 0; bottom: 0; width: 280px; background: white; z-index: 1000; transition: 0.3s; box-shadow: 2px 0 20px rgba(0,0,0,0.1); padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .side-menu.open { left: 0; }
-        .menu-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 999; }
-        
-        .btn { padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; transition: 0.2s; }
-        .btn-primary { background: var(--primary); color: white; }
-        .btn-success { background: #00b894; color: white; }
-        .btn-danger { background: #ff7675; color: white; }
-        .btn-warning { background: #fdcb6e; color: #333; }
-
-        /* 大厅遮罩 */
-        #lobby-overlay { position: fixed; inset: 0; background: var(--primary); z-index: 2000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; }
-        
         /* 工具栏 */
         #painter-tools { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: none; background: rgba(255,255,255,0.95); padding: 8px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); gap: 10px; align-items: center; }
+        
+        /* 遮罩层 */
+        #round-overlay { position: absolute; inset: 0; background: rgba(255,255,255,0.95); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50; }
+        .big-btn { padding: 10px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; color: white; margin: 5px; }
     </style>
 </head>
 <body>
 
-<div id="lobby-overlay">
-    <h1 style="margin-bottom: 20px;">🎨 Gartic Pro</h1>
-    
-    <div style="margin-bottom: 30px; text-align: center;">
-        <label>你的昵称：</label>
-        <input type="text" id="my-nickname" placeholder="输入名字..." value="玩家1" 
-               style="padding:10px; border-radius:8px; border:none; text-align:center; font-weight:bold; color:#333;">
-    </div>
-
-    <div id="lobby-btns">
-        <button class="btn" style="background:white; color:var(--primary); padding:15px 40px; font-size:18px; width:200px; margin-bottom:10px;" onclick="network.createRoom()">🏠 创建房间</button>
-        <div style="margin: 10px;">或</div>
-        <div class="input-group" style="width: 260px;">
-            <input type="text" id="target-id" placeholder="好友房号">
-            <button class="btn btn-success" onclick="network.joinRoom()">🚀 加入</button>
-        </div>
-    </div>
-    
-    <div id="room-info-display" style="display:none; text-align:center;">
-        <p>房号已生成（点击复制）：</p>
-        <h2 id="my-room-id" onclick="copyText(this.innerText)" style="background:rgba(0,0,0,0.2); padding:10px; border-radius:8px; cursor:pointer;">...</h2>
-        <p style="font-size:12px; opacity:0.8;">等待好友进入...</p>
-    </div>
-</div>
-
-<header>
-    <div style="display:flex; align-items:center; gap:10px;">
-        <button class="btn btn-primary" onclick="toggleMenu()">☰ 设置</button>
-        <div class="score-board">
-            <div class="score-item" style="color:var(--primary)">👑 <span id="name-host">房主</span>: <span id="score-host">0</span></div>
-            <div class="score-item" style="color:#00b894">🧢 <span id="name-guest">等待...</span>: <span id="score-guest">0</span></div>
-        </div>
-    </div>
-    <div id="game-status" style="font-weight:bold; color:#d63031;">等待开始</div>
-    <div id="timer">⏱️ --</div>
-</header>
-
-<div class="menu-overlay" onclick="toggleMenu()"></div>
-<aside class="side-menu">
-    <h3>⚙️ 房间设置</h3>
-    <div id="host-controls">
-        <label>选择词库：</label>
-        <select id="theme-selector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
-        <label>获胜分数：</label>
-        <input type="number" id="max-score" value="30" style="width:100%; padding:8px; margin-bottom:10px;">
-        <label>限时(秒)：</label>
-        <input type="number" id="time-limit" value="60" style="width:100%; padding:8px; margin-bottom:20px;">
-        <button class="btn btn-success" style="width:100%; padding:12px;" onclick="engine.startGame()">🎬 开始游戏</button>
-    </div>
-    <div id="guest-controls" style="display:none; color:#666;"><p>等待房主设置规则...</p></div>
-    <hr>
-    <button class="btn btn-danger" onclick="location.reload()">退出房间</button>
-</aside>
-
-<main class="stage-area">
-    <canvas id="mainCanvas"></canvas>
-    
-    <div id="painter-tools">
-        <input type="color" id="colorPicker" value="#000000">
-        <input type="range" id="sizePicker" min="2" max="20" value="5">
-        <button class="btn btn-danger" onclick="board.clear()">🗑️</button>
-        <button class="btn btn-success" onclick="engine.endRound(false)">⏭️ 跳过</button>
-    </div>
-
-    <div id="round-overlay" style="position:absolute; inset:0; background:rgba(255,255,255,0.95); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:50;">
-        <h2 id="round-msg">题目是...</h2>
-        <h1 id="round-word" style="color:var(--primary); font-size:40px; margin:20px 0;">APPLE</h1>
+<div id="view-lobby">
+    <div class="lobby-card">
+        <h1>🎨 你画我猜 Pro</h1>
+        <p style="color:#666; margin-bottom:20px;">跨国低延迟 | 稳定连接</p>
         
-        <div style="display:flex; gap:10px; margin-top:20px;">
-            <button class="btn btn-warning" onclick="engine.saveImage()">💾 保存画作</button>
-            <button id="next-round-btn" class="btn btn-primary" style="display:none;" onclick="engine.nextRound()">➡️ 下一轮</button>
-        </div>
+        <input type="text" id="lobby-nickname" class="lobby-input" placeholder="请输入你的昵称 (必填)">
+        
+        <button class="lobby-btn btn-create" onclick="network.createRoom()">🏠 创建新房间</button>
+        
+        <div class="divider">或者</div>
+        
+        <input type="number" id="lobby-roomid" class="lobby-input" placeholder="输入 6 位房间号">
+        <button class="lobby-btn btn-join" onclick="network.joinRoom()">🚀 加入房间</button>
+        
+        <p id="lobby-status" style="margin-top:15px; font-size:12px; color:#d63031; min-height:1.2em;"></p>
     </div>
-</main>
+</div>
 
-<div class="interaction-panel">
-    <div class="guess-zone">
-        <div class="zone-label">🤔 猜题区 (输入答案)</div>
-        <div id="guess-list"></div>
-        <div class="input-group">
-            <input type="text" id="guess-input" class="input-guess" placeholder="答案是..." onkeypress="if(event.key==='Enter') engine.sendGuess()">
-            <button class="btn btn-warning" onclick="engine.sendGuess()">提交</button>
+<div id="view-game">
+    <header>
+        <div style="display:flex; align-items:center;">
+            <div class="score-board">
+                <div class="score-item" style="color:var(--primary)">👑 <span id="name-host">房主</span>: <span id="score-host">0</span></div>
+                <div class="score-item" style="color:#00b894">🧢 <span id="name-guest">等待...</span>: <span id="score-guest">0</span></div>
+            </div>
+            <div class="room-tag" title="点击复制" onclick="copyRoomID()">
+                房号: <span id="display-room-id">000000</span> 📋
+            </div>
         </div>
-    </div>
-    <div class="chat-zone">
-        <div class="zone-label">💬 聊天室</div>
-        <div id="chat-list"></div>
-        <div class="input-group">
-            <input type="text" id="chat-input" placeholder="随便聊聊..." onkeypress="if(event.key==='Enter') engine.sendChat()">
-            <button class="btn btn-primary" onclick="engine.sendChat()">发送</button>
+        <div id="game-status" style="font-weight:bold; color:#d63031; font-size:14px;">等待开始...</div>
+        <div id="timer">⏱️ --</div>
+    </header>
+
+    <main class="stage-area">
+        <canvas id="mainCanvas"></canvas>
+        
+        <div id="painter-tools">
+            <input type="color" id="colorPicker" value="#000000">
+            <input type="range" id="sizePicker" min="2" max="20" value="5">
+            <button class="btn-mini" style="background:#ff7675; padding:5px 10px;" onclick="board.clear()">🗑️</button>
+            <button class="btn-mini" style="background:#00b894; padding:5px 10px;" onclick="engine.endRound(false)">⏭️ 跳过</button>
+        </div>
+
+        <div id="round-overlay">
+            <h2 id="round-msg">准备好了吗？</h2>
+            <h1 id="round-word" style="color:var(--primary); font-size:40px; margin:20px 0;">Wait</h1>
+            
+            <div id="overlay-btns" style="display:flex; gap:10px;">
+                <button class="big-btn" style="background:#fdcb6e; color:#333;" onclick="engine.saveImage()">💾 下载画作</button>
+                <button id="btn-start-game" class="big-btn" style="background:var(--primary); display:none;" onclick="engine.startGame()">🎬 开始游戏</button>
+                <button id="btn-next-round" class="big-btn" style="background:var(--primary); display:none;" onclick="engine.nextRound()">➡️ 下一轮</button>
+            </div>
+        </div>
+    </main>
+
+    <div class="interaction-panel">
+        <div class="guess-zone">
+            <div class="zone-label">🤔 猜答案 (仅这里输入答案)</div>
+            <div id="guess-list"></div>
+            <div class="input-group">
+                <input type="text" id="guess-input" class="input-guess" placeholder="答案是..." onkeypress="if(event.key==='Enter') engine.sendGuess()">
+                <button class="btn-mini" style="background:#f1c40f; color:#333;" onclick="engine.sendGuess()">提交</button>
+            </div>
+        </div>
+        <div class="chat-zone">
+            <div class="zone-label">💬 聊天吐槽</div>
+            <div id="chat-list"></div>
+            <div class="input-group">
+                <input type="text" id="chat-input" placeholder="说点什么..." onkeypress="if(event.key==='Enter') engine.sendChat()">
+                <button class="btn-mini" style="background:var(--primary);" onclick="engine.sendChat()">发送</button>
+            </div>
         </div>
     </div>
 </div>
 
-<script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
 <script src="painter.js"></script>
-<script src="network.js"></script>
 <script src="engine.js"></script>
+<script src="network.js"></script>
 <script>
+    // 全局初始化
     const board = new DrawingBoard('mainCanvas', (data) => {
         data.cat = 'paint';
-        network.send(data);
+        network.send(data); // 这里的 network 在 network.js 加载后可用
     });
     const engine = new GameEngine(board);
 
-    function toggleMenu() {
-        document.querySelector('.side-menu').classList.toggle('open');
-        const overlay = document.querySelector('.menu-overlay');
-        overlay.style.display = overlay.style.display === 'block' ? 'none' : 'block';
+    function copyRoomID() {
+        const id = document.getElementById('display-room-id').innerText;
+        navigator.clipboard.writeText(id).then(() => alert(`房号 ${id} 已复制！`));
     }
-    function copyText(text) { navigator.clipboard.writeText(text).then(() => alert("已复制")); }
-    window.onload = () => engine.initThemes();
 </script>
 </body>
 </html>
