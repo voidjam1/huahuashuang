@@ -99,7 +99,13 @@ class GameEngine {
 
     // --- 数据处理 ---
 
-    handlePacket(data) {
+handlePacket(data) {
+    if (data.cat === 'paint') {
+        // 跨国高延迟下，如果 data 包含的是坐标点，直接传给 board
+        // 建议在 painter.js 中对 drawRemote 增加一个逻辑：
+        // 如果 data.type === 'start'，则重置上一次的绘图坐标，防止出现“瞬移的长直线”
+        this.board.drawRemote(data);
+    } 
         // 特殊：处理名字同步（防止中途加入显示错误）
         if (data.hostName && !network.isHost) {
             this.hostName = data.hostName;
